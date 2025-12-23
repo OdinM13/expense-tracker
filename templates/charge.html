@@ -1,0 +1,47 @@
+{% extends "layout.html" %}
+
+{% block title %}
+    Log In
+{% endblock %}
+
+{% block main %}
+    <form action="/charge" method="post">
+        <div class="mb-3">
+            <h3>How much money would you like to add to your account?</h3>
+            <p></p>
+            <input autocomplete="off" autofocus class="form-control mx-auto w-auto" id="moneyInput" name="money" placeholder="Amount" type="text">
+            <input type="hidden" name="money_raw" id="moneyRaw">
+        </div>
+        <button class="btn btn-primary" type="submit">Add funds</button>
+    </form>
+    <script>
+        let formatter = new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: 'USD',
+            minimumFractionDigits: 2
+        });
+
+        let input = document.getElementById('moneyInput');
+        let hidden = document.getElementById('moneyRaw');
+        let form = document.querySelector('form');
+
+        input.addEventListener('blur', function() {
+            let rawValue = input.value.replace(/[^\d.]/g, "");
+            hidden.value = rawValue;
+
+            let numericValue = parseFloat(rawValue);
+            if (!isNaN(numericValue)) {
+                input.value = formatter.format(numericValue);
+            } else {
+                input.value = "";
+            }
+        });
+
+        // WICHTIG: Wert auch beim Absenden setzen, falls blur nicht ausgelöst wird
+        form.addEventListener('submit', function () {
+            let rawValue = input.value.replace(/[^\d.]/g, "");
+            hidden.value = rawValue;
+            console.log("Submitting with raw money value:", hidden.value);
+        });
+    </script>
+{% endblock %}
