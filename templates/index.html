@@ -1,44 +1,133 @@
 {% extends "layout.html" %}
 
 {% block title %}
-    Log In
+    Dashboard
 {% endblock %}
 
 {% block main %}
-<div class="table-responsive">
-    <table class="table table-striped table-sm">
-        <thead>
-            <tr>
-                <th>Symbol</th>
-                <th>Shares</th>
-                <th>Price</th>
-                <th>TOTAL</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for stock in stocks %}
-                <tr>
-                    <td>{{ stock.symbol }}</td>
-                    <td>{{ stock.shares }}</td>
-                    <td>{{ stock.price }}</td>
-                    <td>{{ stock.form_total }}</td>
-                </tr>
-            {% endfor %}
-        </tbody>
-        <tfoot>
-            <tr>
-                <td></td>
-                <td></td>
-                <td><b>Cash</b></td>
-                <td>{{ cash }}</td>
-            </tr>
-            <tr>
-                <td></td>
-                <td></td>
-                <td><b>TOTAL</b></td>
-                <td>{{ total }}</td>
-            </tr>
-        </tfoot>
-    </table>
-</div>
+    <div class="container text-center mb-5">
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <div class="card shadow-sm border-0 bg-light">
+                    <div class="card-body">
+                        <h5 class="card-title text-muted font-weight-bold">Current Balance</h5>
+                        <h2 class="text-success font-weight-bold">{{ cash }}</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 mb-3">
+                <div class="card shadow-sm border-0 bg-light">
+                    <div class="card-body">
+                        <h5 class="card-title text-muted font-weight-bold">Spent This Month</h5>
+                        <h2 class="text-danger font-weight-bold">{{ total_spent }}</h2>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row justify-content-center mb-5">
+        <div class="col-md-8 col-lg-5 text-center">
+            <h4 class="mb-4">Spending by Category</h4>
+            <div class="card shadow-sm p-4 border-0">
+                <canvas id="expenseChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-white py-3">
+            <h5 class="mb-0 font-weight-bold">Recent Transactions</h5>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="py-3">Date</th>
+                        <th class="py-3">Category</th>
+                        <th class="py-3">Description</th>
+                        <th class="py-3">Amount</th>
+                        <th class="py-3">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for expense in expenses %}
+                        <tr>
+                            <td class="text-muted small">{{ expense.date }}</td>
+                            <td><span class="badge bg-secondary opacity-75">{{ expense.category }}</span></td>
+                            <td class="text-start">{{ expense.description }}</td>
+                            <td class="text-danger font-weight-bold">- {{ expense.amount | usd }}</td>
+                            <td>
+                                <form action="/delete" method="post">
+                                    <input type="hidden" name="id" value="{{ expense.id }}">
+                                    <button class="btn btn-sm btn-outline-danger px-3" type="submit">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                    {% else %}
+                        <tr>
+                            <td colspan="5" class="text-center py-4 text-muted">No expenses recorded yet.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Parse data passed from Flask/Jinja2
+            const labels = {{ labels | tojson }};
+            const values = {{ values | tojson }};
+
+            // Select canvas context
+            const ctx = document.getElementById('expenseChart').getContext('2d');
+            
+            // Initialize Chart.js
+            new Chart(ctx, {
+                type: 'doughnut', // Clean and modern visualization
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Spending',
+                        data: values,
+                        backgroundColor: [
+                            '#4e73df', '#1cc88a', '#36b9cc', 
+                            '#f6c23e', '#e74a3b', '#858796'
+                        ],
+                        hoverBackgroundColor: [
+                            '#2e59d9', '#17a673', '#2c9faf', 
+                            '#dda20a', '#be2617', '#60616f'
+                        ],
+                        hoverOffset: 10,
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    maintainAspectRatio: false,
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 20,
+                                font: {
+                                    size: 14
+                                }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return ` ${context.label}: $${context.parsed.toFixed(2)}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        });
+    </script>
 {% endblock %}
