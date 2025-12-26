@@ -34,42 +34,70 @@ def after_request(response):
 @app.route("/")
 @login_required
 def index():
-    """Dashboard: Show balance, list and chart data for the current month"""
+    """Dashboard: Show cash flow, analytics and transaction history"""
     user_id = session["user_id"]
-    
-    # Get user's current cash balance
-    user_rows = db.execute("SELECT cash FROM users WHERE id = ?", user_id)
-    cash = user_rows[0]["cash"]
+    timespan = request.args.get("filter", "month")
 
-    # Fetch all expenses for the list (ordered by most recent)
-    expenses = db.execute("SELECT * FROM expenses WHERE user_id = ? ORDER BY date DESC", user_id)
+    # Define SQL filters based on time horizon
+    if timespan == "week":
+        date_filter = "date >= date('now', '-7 days')"
+        display_title = "Last 7 Days"
+    elif timespan == "all":
+        date_filter = "1=1"
+        display_title = "All Time"
+    else:
+        date_filter = "date >= date('now', 'start of month')"
+        display_title = "This Month"
 
-    # Calculate total spent in the CURRENT month
-    # 'start of month' ensures we only sum values from the 1st of this month onwards
-    total_spent_query = db.execute(
-        "SELECT SUM(amount) AS total FROM expenses WHERE user_id = ? AND date >= date('now', 'start of month')", 
-        user_id
-    )
-    total_spent = total_spent_query[0]["total"] if total_spent_query[0]["total"] else 0
+    # 1. Fetch current balance
+    cash = db.execute("SELECT cash FROM users WHERE id = ?", user_id)[0]["cash"]
 
-    # Fetch chart data: Grouped by category for the CURRENT month
+    # 2. Fetch combined history (Expenses and Income) using UNION
+    # We add a virtual column 'type' to distinguish between them in the template
+    transactions = db.execute(
+            f"SELECT id, amount, category, description, date, 'expense' AS type FROM expenses "
+            f"WHERE user_id = ? AND {date_filter} "
+            f"UNION ALL "
+            f"SELECT id, amount, 'Deposit' AS category, 'Cash Inflow' AS description, date, 'income' AS type FROM income "
+            f"WHERE user_id = ? AND {date_filter} "
+            f"ORDER BY date DESC", user_id, user_id
+            )
+
+    # 3. Calculate Totals for the selected period
+    total_spent = db.execute(f"SELECT SUM(amount) AS total FROM expenses WHERE user_id = ? AND {date_filter}", user_id)[0]["total"] or 0
+    total_income = db.execute(f"SELECT SUM(amount) AS total FROM income WHERE user_id = ? AND {date_filter}", user_id)[0]["total"] or 0
+
+    # 4. Data for Category Chart (Expenses only)
     chart_rows = db.execute(
-        "SELECT category, SUM(amount) AS total FROM expenses "
-        "WHERE user_id = ? AND date >= date('now', 'start of month') "
-        "GROUP BY category", 
-        user_id
-    )
-    
-    # Prepare lists for Chart.js
-    chart_labels = [row["category"] for row in chart_rows]
-    chart_values = [row["total"] for row in chart_rows]
+            f"SELECT category, SUM(amount) AS total FROM expenses WHERE user_id = ? AND {date_filter} GROUP BY category", 
+            user_id
+            )
+    cat_labels = [row["category"] for row in chart_rows]
+    cat_values = [row["total"] for row in chart_rows]
+
+    # 5. Data for Trend Chart (Income vs. Expenses over time)
+    # Get daily expenses
+    exp_trend = db.execute(
+            f"SELECT date(date) AS day, SUM(amount) AS total FROM expenses "
+            f"WHERE user_id = ? AND {date_filter} GROUP BY day ORDER BY day ASC", user_id
+            )
+    # Get daily income
+    inc_trend = db.execute(
+            f"SELECT date(date) AS day, SUM(amount) AS total FROM income "
+            f"WHERE user_id = ? AND {date_filter} GROUP BY day ORDER BY day ASC", user_id
+            )
 
     return render_template("index.html", 
                            cash=usd(cash), 
-                           expenses=expenses, 
+                           transactions=transactions, 
                            total_spent=usd(total_spent),
-                           labels=chart_labels, 
-                           values=chart_values)
+                           total_income=usd(total_income),
+                           cat_labels=cat_labels, 
+                           cat_values=cat_values,
+                           exp_trend=exp_trend,
+                           inc_trend=inc_trend,
+                           timespan=timespan,
+                           display_title=display_title)
 
 @app.route("/add", methods=["GET", "POST"])
 @login_required
@@ -137,26 +165,21 @@ def delete():
 @app.route("/charge", methods=["GET", "POST"])
 @login_required
 def charge():
-    """Add funds to account"""
+    """Add funds and log the transaction"""
     if request.method == "POST":
         amount = request.form.get("money_raw")
-        
-        if not amount:
-            return apology("must provide amount", 400)
-            
-        try:
-            amount = float(amount)
-            if amount <= 0:
-                return apology("must be positive amount", 400)
-        except ValueError:
-            return apology("invalid amount", 400)
+        if not amount or float(amount) <= 0:
+            return apology("Invalid amount", 400)
 
+        amount = float(amount)
+        # 1. Update user's main balance
         db.execute("UPDATE users SET cash = cash + ? WHERE id = ?", amount, session["user_id"])
-        
-        flash("Funds added!")
+        # 2. Log the deposit in the income table
+        db.execute("INSERT INTO income (user_id, amount) VALUES (?, ?)", session["user_id"], amount)
+
+        flash("Funds added successfully!")
         return redirect("/")
-    else:
-        return render_template("charge.html")
+    return render_template("charge.html")
 
 
 @app.route("/login", methods=["GET", "POST"])
