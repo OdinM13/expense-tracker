@@ -1,5 +1,5 @@
 # Expense Tracker with Advanced Analytics
-#### Video Demo: <URL HERE>
+#### Video Demo: https://youtu.be/cVzVXkgk2pk
 #### Description:
 This project is a comprehensive web-based financial management tool built with Python, Flask, and SQLite. It enables users to monitor their personal finances by logging expenditures and income, providing a clear visual representation of their financial health. 
 
